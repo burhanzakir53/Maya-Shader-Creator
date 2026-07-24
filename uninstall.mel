@@ -1,0 +1,125 @@
+// ======================================================
+// Shader Creator Uninstaller for Autodesk Maya
+// ======================================================
+
+global proc uninstall() {
+    global string $gShelfTopLevel;
+    
+    print("\n========================================\n");
+    print("Uninstalling Shader Creator...\n");
+    print("========================================\n");
+    
+    // Get Maya scripts directory
+    string $userScriptDir = `internalVar -userScriptDir`;
+    string $destPy = $userScriptDir + "ShaderCreator.py";
+    string $destPyc = $userScriptDir + "ShaderCreator.pyc";
+    string $legacyVrayPy = $userScriptDir + "VRayShaderCreator.py";
+    string $legacyVrayPyc = $userScriptDir + "VRayShaderCreator.pyc";
+    
+    // Get Maya prefs icon directory
+    string $userPrefsDir = `internalVar -userPrefDir`;
+    string $iconDir = $userPrefsDir + "icons/";
+    string $destIcon = $iconDir + "ShaderCreator_icon.png";
+    string $legacyVrayIcon = $iconDir + "VRayShaderCreator_icon.png";
+    
+    int $filesRemoved = 0;
+    
+    // Remove Python script
+    if (`filetest -r $destPy`) {
+        print("Removing: " + $destPy + "\n");
+        sysFile -delete $destPy;
+        $filesRemoved++;
+    }
+    
+    // Remove compiled Python file if it exists
+    if (`filetest -r $destPyc`) {
+        print("Removing: " + $destPyc + "\n");
+        sysFile -delete $destPyc;
+        $filesRemoved++;
+    }
+    if (`filetest -r $legacyVrayPy`) {
+        print("Removing legacy file: " + $legacyVrayPy + "\n");
+        sysFile -delete $legacyVrayPy;
+        $filesRemoved++;
+    }
+    if (`filetest -r $legacyVrayPyc`) {
+        print("Removing legacy file: " + $legacyVrayPyc + "\n");
+        sysFile -delete $legacyVrayPyc;
+        $filesRemoved++;
+    }
+    
+    // Remove icon
+    if (`filetest -r $destIcon`) {
+        print("Removing: " + $destIcon + "\n");
+        sysFile -delete $destIcon;
+        $filesRemoved++;
+    }
+    if (`filetest -r $legacyVrayIcon`) {
+        print("Removing legacy icon: " + $legacyVrayIcon + "\n");
+        sysFile -delete $legacyVrayIcon;
+        $filesRemoved++;
+    }
+    
+    // Remove shelf button from Custom shelf
+    string $shelfName = "Custom";
+    int $buttonsRemoved = 0;
+    
+    if (`shelfLayout -exists $shelfName`) {
+        string $existingButtons[] = `shelfLayout -q -childArray $shelfName`;
+        if (size($existingButtons) > 0) {
+            for ($btn in $existingButtons) {
+                if (`objectType $btn` == "shelfButton") {
+                    string $label = `shelfButton -q -label $btn`;
+                    if ($label == "AI Shader" || $label == "VRay Shader" || $label == "Shader Creator") {
+                        print("Removing shelf button: " + $btn + "\n");
+                        deleteUI $btn;
+                        $buttonsRemoved++;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Close any open Shader Creator windows
+    string $workspaceControls[] = {"shaderCreatorWorkspace", "aiShaderWorkspace", "vrayShaderWorkspace"};
+    for ($workspaceControl in $workspaceControls) {
+        if (`workspaceControl -exists $workspaceControl`) {
+            print("Closing Shader Creator window: " + $workspaceControl + "\n");
+            deleteUI $workspaceControl;
+        }
+    }
+    
+    print("\n========================================\n");
+    print("Uninstallation Summary:\n");
+    print("========================================\n");
+    print("Files removed: " + $filesRemoved + "\n");
+    print("Shelf buttons removed: " + $buttonsRemoved + "\n");
+    
+    if ($filesRemoved > 0 || $buttonsRemoved > 0) {
+        print("\nShader Creator has been uninstalled successfully!\n");
+        print("========================================\n");
+        
+        // Show confirmation dialog
+        confirmDialog
+            -title "Uninstallation Complete"
+            -message ("Shader Creator has been uninstalled successfully!\n\n" +
+                      "Files removed: " + $filesRemoved + "\n" +
+                      "Shelf buttons removed: " + $buttonsRemoved + "\n\n" +
+                      "Please restart Maya to complete the uninstallation (Recommended).")
+            -button "OK"
+            -defaultButton "OK";
+    } else {
+        print("\nNo Shader Creator files found.\n");
+        print("========================================\n");
+        
+        // Show info dialog
+        confirmDialog
+            -title "Nothing to Uninstall"
+            -message "No Shader Creator files were found.\n\nThe tool may have already been uninstalled."
+            -button "OK"
+            -defaultButton "OK";
+    }
+}
+
+// Run the uninstaller
+uninstall();

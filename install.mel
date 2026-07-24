@@ -1,0 +1,134 @@
+// ======================================================
+// Shader Creator Installer for Autodesk Maya
+// ======================================================
+
+global proc install() {
+    global string $gShelfTopLevel;
+    
+    // Get the directory where this install.mel is located
+    string $scriptPath = `whatIs "install"`;
+    string $tokens[];
+    tokenize $scriptPath ":" $tokens;
+    string $melFile = `substitute "^[ \t]*" $tokens[size($tokens)-1] ""`;
+    string $installDir = `dirname $melFile`;
+    
+    print("Install directory: " + $installDir + "\n");
+    
+    // Define file paths
+    string $sourcePy = $installDir + "/ShaderCreator.py";
+    string $sourceIcon = $installDir + "/icon.png";
+    
+    // Get Maya scripts directory
+    string $userScriptDir = `internalVar -userScriptDir`;
+    string $destPy = $userScriptDir + "ShaderCreator.py";
+    
+    // Get Maya prefs icon directory
+    string $userPrefsDir = `internalVar -userPrefDir`;
+    string $iconDir = $userPrefsDir + "icons/";
+    string $destIcon = $iconDir + "ShaderCreator_icon.png";
+    
+    // Create icons directory if it doesn't exist
+    if (!`filetest -d $iconDir`) {
+        sysFile -makeDir $iconDir;
+        print("Created icons directory: " + $iconDir + "\n");
+    }
+    
+    // Check if source files exist
+    if (!`filetest -r $sourcePy`) {
+        error("ShaderCreator.py not found in install directory: " + $installDir);
+        return;
+    }
+    
+    if (!`filetest -r $sourceIcon`) {
+        warning("icon.png not found in install directory. Will use default icon.");
+        $destIcon = ""; // Clear dest icon if source doesn't exist
+    }
+    
+    // Copy Python script
+    print("Copying ShaderCreator.py...\n");
+    sysFile -copy $destPy $sourcePy;
+    print("Installed: " + $destPy + "\n");
+    
+    // Copy icon if it exists
+    if ($destIcon != "") {
+        print("Copying icon.png...\n");
+        sysFile -copy $destIcon $sourceIcon;
+        print("Installed: " + $destIcon + "\n");
+    }
+    
+    // Use the Custom shelf (Maya's default custom shelf)
+    string $shelfName = "Custom";
+    string $shelfLabel = "Custom";
+    
+    // Get current shelf before making changes
+    string $shelfTop = $gShelfTopLevel;
+    string $currentShelf = `tabLayout -q -selectTab $shelfTop`;
+    
+    // Check if Custom shelf exists, if not create it
+    int $shelfExists = `shelfLayout -exists $shelfName`;
+    
+    if (!$shelfExists) {
+        print("Creating Custom shelf...\n");
+        addNewShelfTab $shelfName;
+        shelfTabLayout -edit -tabLabel $shelfName $shelfLabel $shelfTop;
+    } else {
+        print("Using existing Custom shelf...\n");
+        // Check if button already exists and remove it
+        string $existingButtons[] = `shelfLayout -q -childArray $shelfName`;
+        if (size($existingButtons) > 0) {
+            for ($btn in $existingButtons) {
+                if (`objectType $btn` == "shelfButton") {
+                    string $label = `shelfButton -q -label $btn`;
+                    if ($label == "AI Shader" || $label == "VRay Shader" || $label == "Shader Creator") {
+                        print("Removing existing shader creator button...\n");
+                        deleteUI $btn;
+                    }
+                }
+            }
+        }
+    }
+    
+    // Switch to the shelf to add button
+    tabLayout -edit -selectTab $shelfName $shelfTop;
+    
+    // Create shelf button with proper Python command
+    string $command = "python(\"import ShaderCreator\\nimport importlib\\nimportlib.reload(ShaderCreator)\\nShaderCreator.create_shader_creator_ui()\")";
+    string $annotation = "Shader Creator - Create Arnold or V-Ray PBR materials with texture maps";
+    
+    // Determine which icon to use
+    string $iconToUse = ($destIcon != "") ? "ShaderCreator_icon.png" : "render_aiStandardSurface.png";
+    
+    print("Adding shelf button...\n");
+    shelfButton
+        -command $command
+        -annotation $annotation
+        -label "Shader Creator"
+        -image1 $iconToUse
+        -parent $shelfName;
+    
+    // Restore previous shelf selection
+    tabLayout -edit -selectTab $currentShelf $shelfTop;
+    
+    print("\n========================================\n");
+    print("Shader Creator installed successfully!\n");
+    print("========================================\n");
+    print("Location: " + $destPy + "\n");
+    if ($destIcon != "") {
+        print("Icon: " + $destIcon + "\n");
+    }
+    print("Shelf: " + $shelfLabel + "\n");
+    print("\nClick the 'Shader Creator' button in the '" + $shelfLabel + "' shelf to launch.\n");
+    print("========================================\n");
+    
+    // Show confirmation dialog
+    confirmDialog
+        -title "Installation Complete"
+        -message ("Shader Creator has been installed successfully!\n\n" +
+                  "Look for the 'Shader Creator' button in the '" + $shelfLabel + "' shelf.\n\n" +
+                  "The tool has been copied to:\n" + $destPy)
+        -button "OK"
+        -defaultButton "OK";
+}
+
+// Run the installer
+install();
