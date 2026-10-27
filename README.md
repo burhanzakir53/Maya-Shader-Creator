@@ -20,6 +20,7 @@ Shader Creator is an Autodesk Maya tool that builds PBR materials from a set of 
 
 - **Dual engine support:** Arnold and V-Ray from a single window, switchable from a dropdown. The tool opens on the engine matching your current render settings.
 - **Texture set detection:** Pick one texture and the tool finds every texture in that folder that shares its name prefix, then offers them in a dropdown on each channel.
+- **You choose every slot (no auto-fill, on purpose):** Channel slots are deliberately not filled automatically. Texture names are often ambiguous. A file like `shirt_sc` could mean sheen color or specular color, so a guess can silently put a map in the wrong slot. Then you waste time checking and fixing every slot. Instead, each channel has a dropdown listing the textures found in the folder, so you pick the right file in one click and know it is correct.
 - **UDIM support:** Numbered tile sequences (`.1001.`, `.1002.`, ...) are collapsed into one `<UDIM>` entry and set up as UDIM textures automatically.
 - **Full PBR channel set:** Base Color, Ambient Occlusion, Roughness, Metalness, Specular Weight, Opacity, Normal and Displacement, plus the advanced slots Transmission, Subsurface, Emission, Sheen and Coat.
 - **Correct color spaces:** Color maps are set to `sRGB`. Data maps (roughness, metalness, normal, etc.) are set to `Raw`.
