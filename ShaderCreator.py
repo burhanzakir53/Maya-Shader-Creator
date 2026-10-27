@@ -612,6 +612,8 @@ def create_shader_creator_ui(engine=None):
     cmds.separator(style="in", h=10, parent=main_layout)
     UI_REFS["create_button"] = cmds.button(label="Create Material", height=45, bgc=(1, 1, 1), parent=main_layout)
     AUTO_REFRESH_TOGGLE = cmds.checkBox(label="Auto-refresh UI after material creation", v=True, parent=main_layout)
+    cmds.separator(style="none", h=6, parent=main_layout)
+    cmds.text(label="Made by Burhanuddin", align="center", enable=False, fn="smallObliqueLabelFont", h=20, parent=main_layout)
 
     UI_REFS["tex_fields"] = tex_fields
     UI_REFS["advanced"] = advanced
