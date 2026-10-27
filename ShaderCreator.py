@@ -30,6 +30,7 @@ RENDER_ENGINES = {
         "plugin_label": "V-Ray for Maya",
     },
 }
+ORM_CHANNELS = {"ambientocclusion": "R", "roughness": "G", "metalness": "B"}
 SECTION_KEYS = ["transmission", "subsurface", "emission", "sheen", "coat"]
 SECTION_LABELS = {
     ENGINE_ARNOLD: {
@@ -198,6 +199,8 @@ def refresh_all_fields(tex_fields, advanced, material_name_field):
                 cmds.menuItem(label="-- Select Map --", parent=f["drop"])
             if "range" in f: cmds.checkBox(f["range"], e=True, v=(False if key == "displacement" else True))
             if "cc" in f: cmds.checkBox(f["cc"], e=True, v=True)
+            for range_key in f:
+                if range_key.startswith("range_"): cmds.checkBox(f[range_key], e=True, v=True)
         else: cmds.textField(f, e=True, text="")
 
     for data in advanced.values():
@@ -215,6 +218,12 @@ def refresh_all_fields(tex_fields, advanced, material_name_field):
         if "color_col" in data: cmds.columnLayout(data["color_col"], e=True, visible=False)
         if "use_sep_r" in data: cmds.checkBox(data["use_sep_r"], e=True, v=False)
         if "rough_col" in data: cmds.columnLayout(data["rough_col"], e=True, visible=False)
+
+    if UI_REFS.get("use_orm") and cmds.checkBox(UI_REFS["use_orm"], exists=True):
+        cmds.checkBox(UI_REFS["use_orm"], e=True, v=False)
+        separate_col, orm_col = UI_REFS["orm_columns"]
+        cmds.columnLayout(separate_col, e=True, visible=True)
+        cmds.columnLayout(orm_col, e=True, visible=False)
 
     cmds.textField(material_name_field, e=True, text="", enable=True)
     if USE_CURRENT_NAME_TOGGLE and cmds.checkBox(USE_CURRENT_NAME_TOGGLE, exists=True):
@@ -436,6 +445,8 @@ def reset_ui_refs():
         "color_correct_checkboxes": [],
         "advanced_frames": {},
         "create_button": None,
+        "use_orm": None,
+        "orm_columns": None,
         "tex_fields": None,
         "advanced": None,
         "material_name_field": None,
@@ -577,7 +588,35 @@ def create_shader_creator_ui(engine=None):
 
     f_base, cb_base, d_base = file_picker("Base Color", "cc")
     tex_fields["basecolor"] = {"path": f_base, "cc": cb_base, "drop": d_base}
-    for name in ["Ambient Occlusion", "Roughness", "Metalness", "Specular Weight", "Opacity"]:
+
+    cmds.frameLayout(label="Ambient Occlusion / Roughness / Metalness", collapsable=True, cl=False, mw=5, parent=main_layout)
+    cmds.columnLayout(adjustableColumn=True, rowSpacing=5)
+    use_orm_cb = cmds.checkBox(label="Use ORM Map", v=False)
+
+    separate_col = cmds.columnLayout(adjustableColumn=True, rowSpacing=5)
+    for name in ["Ambient Occlusion", "Roughness", "Metalness"]:
+        f, cb, d = file_picker(name, "range")
+        tex_fields[name.lower().replace(" ", "")] = {"path": f, "range": cb, "drop": d}
+    cmds.setParent("..")
+
+    orm_col = cmds.columnLayout(adjustableColumn=True, rowSpacing=5, visible=False)
+    f_orm, _, d_orm = file_picker("ORM Map (R: AO, G: Roughness, B: Metalness)")
+    tex_fields["orm"] = {"path": f_orm, "drop": d_orm}
+    for key, name in [("ambientocclusion", "Ambient Occlusion"), ("roughness", "Roughness"), ("metalness", "Metalness")]:
+        cmds.rowLayout(numberOfColumns=2, columnWidth2=(130, 200))
+        cmds.text(f"{name}:", align="left")
+        range_cb = cmds.checkBox(label=get_range_checkbox_label(engine), v=True)
+        UI_REFS["range_checkboxes"].append(range_cb)
+        tex_fields["orm"][f"range_{key}"] = range_cb
+        cmds.setParent("..")
+    cmds.setParent("..")
+
+    cmds.setParent(main_layout)
+    UI_REFS["use_orm"] = use_orm_cb
+    UI_REFS["orm_columns"] = (separate_col, orm_col)
+    cmds.checkBox(use_orm_cb, e=True, cc=lambda v: (cmds.columnLayout(separate_col, e=True, visible=not v), cmds.columnLayout(orm_col, e=True, visible=bool(v))))
+
+    for name in ["Specular Weight", "Opacity"]:
         f, cb, d = file_picker(name, "range")
         tex_fields[name.lower().replace(" ", "")] = {"path": f, "range": cb, "drop": d}
     f_norm, _, d_norm = file_picker("Normal")
@@ -688,17 +727,35 @@ def create_ai_shader(tex_fields, advanced, material_name_field):
         if match and int(match.group(1)) >= 1001: cmds.setAttr(f"{f}.uvTilingMode", 3)
         return f
 
+    use_orm = bool(UI_REFS.get("use_orm") and cmds.checkBox(UI_REFS["use_orm"], q=True, v=True))
+    orm_path = get_path(tex_fields["orm"]["path"]) if use_orm else None
+    orm_file = create_file("ORM", orm_path) if orm_path else None
+
     base_node, base_cc_out = None, None
     if get_path(tex_fields["basecolor"]["path"]):
         base_file_node = create_file('baseColor', get_path(tex_fields['basecolor']['path']), 'sRGB', False)
         base_node = f"{base_file_node}.outColor"
 
-    if get_path(tex_fields["ambientocclusion"]["path"]) and base_node:
-        ao = create_file("AO", get_path(tex_fields["ambientocclusion"]["path"]), alphaLum=True); ao_out = f"{ao}.outColor"
-        if cmds.checkBox(tex_fields["ambientocclusion"]["range"], q=True, v=True):
-            ao_range = cmds.shadingNode("aiRange", asUtility=True); cmds.connectAttr(ao_out, f"{ao_range}.input", f=True); ao_out = f"{ao_range}.outColor"
+    ao_path = None if use_orm else get_path(tex_fields["ambientocclusion"]["path"])
+    if base_node and (ao_path or orm_file):
+        ao_scalar = None
+        if orm_file:
+            if cmds.checkBox(tex_fields["orm"]["range_ambientocclusion"], q=True, v=True):
+                ao_range = cmds.shadingNode("aiRange", asUtility=True)
+                for channel in "RGB": cmds.connectAttr(f"{orm_file}.outColorR", f"{ao_range}.input{channel}", f=True)
+                ao_out = f"{ao_range}.outColor"
+            else:
+                ao_scalar = f"{orm_file}.outColorR"
+        else:
+            ao = create_file("AO", ao_path, alphaLum=True); ao_out = f"{ao}.outColor"
+            if cmds.checkBox(tex_fields["ambientocclusion"]["range"], q=True, v=True):
+                ao_range = cmds.shadingNode("aiRange", asUtility=True); cmds.connectAttr(ao_out, f"{ao_range}.input", f=True); ao_out = f"{ao_range}.outColor"
         layer = cmds.shadingNode("aiLayerRgba", asUtility=True); cmds.setAttr(f"{layer}.operation2", 23); cmds.setAttr(f"{layer}.enable2", 1)
-        cmds.connectAttr(base_node, f"{layer}.input1", f=True); cmds.connectAttr(ao_out, f"{layer}.input2", f=True); base_node = f"{layer}.outColor"
+        cmds.connectAttr(base_node, f"{layer}.input1", f=True)
+        if ao_scalar:
+            for channel in "RGB": cmds.connectAttr(ao_scalar, f"{layer}.input2{channel}", f=True)
+        else: cmds.connectAttr(ao_out, f"{layer}.input2", f=True)
+        base_node = f"{layer}.outColor"
 
     if base_node:
         final_base = base_node
@@ -710,6 +767,14 @@ def create_ai_shader(tex_fields, advanced, material_name_field):
 
     scalars = {"roughness": "specularRoughness", "metalness": "metalness", "specularweight": "specular", "opacity": "opacity"}
     for k, attr in scalars.items():
+        if use_orm and k in ORM_CHANNELS:
+            if orm_file:
+                channel = ORM_CHANNELS[k]
+                orm_out = f"{orm_file}.outColor{channel}"
+                if cmds.checkBox(tex_fields["orm"][f"range_{k}"], q=True, v=True):
+                    r = cmds.shadingNode("aiRange", asUtility=True); cmds.connectAttr(orm_out, f"{r}.input{channel}", f=True); orm_out = f"{r}.outColor{channel}"
+                cmds.connectAttr(orm_out, f"{shader}.{attr}", f=True)
+            continue
         p = get_path(tex_fields[k]["path"])
         if p:
             f = create_file(k, p, alphaLum=True); final_scalar = f"{f}.outColor"
@@ -846,21 +911,31 @@ def create_vray_shader(tex_fields, advanced, material_name_field):
         if match and int(match.group(1)) >= 1001: cmds.setAttr(f"{f}.uvTilingMode", 3)
         return f
 
+    use_orm = bool(UI_REFS.get("use_orm") and cmds.checkBox(UI_REFS["use_orm"], q=True, v=True))
+    orm_path = get_path(tex_fields["orm"]["path"]) if use_orm else None
+    orm_file = create_file("ORM", orm_path) if orm_path else None
+
     base_node, base_cc_out = None, None
     if get_path(tex_fields["basecolor"]["path"]):
         base_file_node = create_file('baseColor', get_path(tex_fields['basecolor']['path']), 'sRGB', False)
         base_node = f"{base_file_node}.outColor"
 
-    if get_path(tex_fields["ambientocclusion"]["path"]) and base_node:
-        ao = create_file("AO", get_path(tex_fields["ambientocclusion"]["path"]), alphaLum=True); ao_out = f"{ao}.outColor"
-        if cmds.checkBox(tex_fields["ambientocclusion"]["range"], q=True, v=True):
+    ao_path = None if use_orm else get_path(tex_fields["ambientocclusion"]["path"])
+    if base_node and (ao_path or orm_file):
+        if orm_file:
+            ao_out = ao_src = f"{orm_file}.outColorR"
+            ao_use_range = cmds.checkBox(tex_fields["orm"]["range_ambientocclusion"], q=True, v=True)
+        else:
+            ao = create_file("AO", ao_path, alphaLum=True); ao_out = f"{ao}.outColor"; ao_src = f"{ao}.outColorR"
+            ao_use_range = cmds.checkBox(tex_fields["ambientocclusion"]["range"], q=True, v=True)
+        if ao_use_range:
             ao_remap = cmds.shadingNode("remapValue", asUtility=True)
-            cmds.connectAttr(f"{ao}.outColorR", f"{ao_remap}.inputValue", f=True)
+            cmds.connectAttr(ao_src, f"{ao_remap}.inputValue", f=True)
             ao_out = f"{ao_remap}.outValue"
         mult = cmds.shadingNode("multiplyDivide", asUtility=True)
         cmds.setAttr(f"{mult}.operation", 1)
         cmds.connectAttr(base_node, f"{mult}.input1", f=True)
-        if cmds.checkBox(tex_fields["ambientocclusion"]["range"], q=True, v=True):
+        if ao_use_range or orm_file:
             cmds.connectAttr(ao_out, f"{mult}.input2X", f=True)
             cmds.connectAttr(ao_out, f"{mult}.input2Y", f=True)
             cmds.connectAttr(ao_out, f"{mult}.input2Z", f=True)
@@ -886,6 +961,15 @@ def create_vray_shader(tex_fields, advanced, material_name_field):
         "opacity": "opacityMap"
     }
     for k, attr in scalars.items():
+        if use_orm and k in ORM_CHANNELS:
+            if orm_file:
+                orm_out = f"{orm_file}.outColor{ORM_CHANNELS[k]}"
+                if cmds.checkBox(tex_fields["orm"][f"range_{k}"], q=True, v=True):
+                    r = cmds.shadingNode("remapValue", asUtility=True)
+                    cmds.connectAttr(orm_out, f"{r}.inputValue", f=True)
+                    orm_out = f"{r}.outValue"
+                cmds.connectAttr(orm_out, f"{shader}.{attr}", f=True)
+            continue
         p = get_path(tex_fields[k]["path"])
         if p:
             f = create_file(k, p, alphaLum=True)

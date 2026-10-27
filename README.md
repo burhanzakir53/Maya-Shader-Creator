@@ -12,43 +12,37 @@ Shader Creator is an Autodesk Maya tool that builds PBR materials from a set of 
 - [How Texture Detection Works](#how-texture-detection-works)
 - [What Gets Built](#what-gets-built)
 - [Replacing an Existing Material](#replacing-an-existing-material)
-- [Running Without the Shelf Button](#running-without-the-shelf-button)
 - [Troubleshooting](#troubleshooting)
 - [Uninstallation](#uninstallation)
-- [Project Files](#project-files)
 - [License](#license)
 
 ## Features
 
 - **Dual engine support:** Arnold and V-Ray from a single window, switchable from a dropdown. The tool opens on the engine matching your current render settings.
 - **Texture set detection:** Pick one texture and the tool finds every texture in that folder that shares its name prefix, then offers them in a dropdown on each channel.
-- **UDIM support:** Numbered tile sequences (`.1001.`, `.1002.`, ...) are collapsed into one `<UDIM>` entry, and the file node is set to UDIM tiling mode.
+- **UDIM support:** Numbered tile sequences (`.1001.`, `.1002.`, ...) are collapsed into one `<UDIM>` entry and set up as UDIM textures automatically.
 - **Full PBR channel set:** Base Color, Ambient Occlusion, Roughness, Metalness, Specular Weight, Opacity, Normal and Displacement, plus the advanced slots Transmission, Subsurface, Emission, Sheen and Coat.
-- **Correct color spaces:** Color maps (base color and the optional color maps in the advanced slots) are set to `sRGB`. Data maps (roughness, metalness, normal, etc.) are set to `Raw`.
-- **Optional utility nodes:** Per-channel toggles add range/remap nodes and color-correction nodes.
-- **Shared UV placement:** All file nodes in a material share one `place2dTexture` node.
-- **Material replacement:** Can rebuild an existing material under the same name and clean up the old network, while protecting Maya's default shaders.
+- **Correct color spaces:** Color maps are set to `sRGB`. Data maps (roughness, metalness, normal, etc.) are set to `Raw`.
+- **Optional extras per channel:** Toggles add a range/remap adjustment or a color correction to a channel.
+- **Material replacement:** Can rebuild an existing material under the same name and clean up the old one, while protecting Maya's default shaders.
 - **Safety checks:** Warns if the selected engine's plug-in is not loaded, or if it differs from the active renderer in Render Settings. It never changes your Render Settings.
 
 ## Requirements
 
-- Autodesk Maya with Python 3 (Maya 2022 or later). The script uses f-strings and dockable `workspaceControl` windows.
-- For Arnold materials: the **Arnold for Maya (`mtoa`)** plug-in loaded.
-- For V-Ray materials: the **V-Ray for Maya (`vrayformaya`)** plug-in loaded.
+- Autodesk Maya 2022 or later.
+- For Arnold materials: the Arnold for Maya (`mtoa`) plug-in loaded.
+- For V-Ray materials: the V-Ray for Maya (`vrayformaya`) plug-in loaded.
 
 You only need the plug-in for the engine you actually use. Load it from **Windows > Settings/Preferences > Plug-in Manager**.
 
 ## Installation
 
-1. Download or clone this repository and keep `install.mel`, `ShaderCreator.py` and `icon.png` together in the same folder.
+1. Download this repository and keep `install.mel`, `ShaderCreator.py` and `icon.png` together in the same folder.
 2. Drag and drop `install.mel` into the Maya viewport (or open it in the Script Editor and run it).
-3. The installer:
-   - copies `ShaderCreator.py` into your Maya user scripts folder,
-   - copies the icon into your Maya preferences `icons` folder,
-   - adds a **Shader Creator** button to the **Custom** shelf (creating the shelf if needed), replacing any older button from a previous version.
+3. The installer copies the tool and its icon into your Maya user folders and adds a **Shader Creator** button to the **Custom** shelf (creating the shelf if needed). It replaces any older button from a previous version.
 4. A confirmation dialog appears when it finishes. Click the shelf button to launch the tool.
 
-Installing again is safe and is also how you update: re-run `install.mel` from the newer download and restart Maya, or reload the module, so Maya picks up the new script.
+To update, run `install.mel` again from the newer download and restart Maya.
 
 ## Quick Start
 
@@ -66,11 +60,11 @@ Installing again is safe and is also how you update: re-run `install.mel` from t
 
 | Control | What it does |
 | --- | --- |
-| **Render Engine** | Switches between Arnold and V-Ray. Labels, utility options and advanced section names update to match. |
+| **Render Engine** | Switches between Arnold and V-Ray. Labels, options and advanced section names update to match. |
 | **Name Your Material** | Name for the new shader. If left empty you are asked whether to continue with a default name (`ArnoldMat` or `VRayMat`). |
 | **Use current material name** | Reuses the name of the material currently assigned to the selection and disables the name field. |
 | **Target Material** | Appears when the selection already has materials. Choose which one the new material replaces. |
-| **Delete old material and textures** | Removes the replaced material's network once nothing uses it any more. On by default. |
+| **Delete old material and textures** | Removes the replaced material once nothing uses it any more. On by default. |
 | **Detect Materials** | Opens a file browser and scans the chosen texture's folder for the rest of the set. |
 | **Material Detected** | Shows the name prefix the tool derived from the chosen file. |
 
@@ -101,17 +95,32 @@ Collapsed by default. Each has a **Weight Map**, and some have extra options.
 | Sheen | Sheen | Separate color texture, separate roughness texture |
 | Coat | Coat | Separate color texture, separate roughness texture |
 
+### Ambient Occlusion / Roughness / Metalness (ORM)
+
+These three channels sit together in their own section. By default each has its own map field.
+
+Tick **Use ORM Map** at the top of the section if your textures come as one packed ORM map. The three separate fields are replaced by a single **ORM Map** field, and the channels are read as:
+
+| Channel of the ORM map | Drives |
+| --- | --- |
+| Red | Ambient Occlusion |
+| Green | Roughness |
+| Blue | Metalness |
+
+Each of the three still has its own **Use Range / Use Remap** toggle. Untick **Use ORM Map** to go back to separate maps.
+
+### Advanced section options
+
 Ticking **Use separate color texture** or **Use separate roughness texture** reveals an extra map field for that slot.
 
 ### Other
 
 - **Auto-refresh UI after material creation** clears all fields after a successful build, ready for the next material. On by default.
 - **Edit > Refresh UI** clears every field manually.
-- A small signature line sits at the bottom of the window.
 
 ## How Texture Detection Works
 
-After you pick a file, the tool takes the file name without its extension and looks for the first of these channel keywords, preceded by `_` or `.`:
+After you pick a file, the tool looks at the file name for one of these channel keywords, preceded by `_` or `.`:
 
 `basecolor`, `diffuse`, `albedo`, `roughness`, `rough`, `metalness`, `metallic`, `metal`, `normal`, `nrm`, `height`, `displacement`, `disp`, `opacity`, `alpha`, `ao`, `ambientocclusion`, `specular`
 
@@ -131,70 +140,21 @@ You still choose which file goes on which channel using the dropdowns. Nothing i
 
 ## What Gets Built
 
-### Arnold (`aiStandardSurface`)
-
-| Channel | Network |
-| --- | --- |
-| Base Color | file (sRGB) > optional `aiColorCorrect` > `baseColor` |
-| Ambient Occlusion | file > optional `aiRange` > multiplied into base color with `aiLayerRgba` |
-| Roughness | file > optional `aiRange` > `specularRoughness` |
-| Metalness | file > optional `aiRange` > `metalness` |
-| Specular Weight | file > optional `aiRange` > `specular` |
-| Opacity | file > optional `aiRange` > `opacity` |
-| Normal | file > `aiNormalMap` > `normalCamera` |
-| Displacement | file > optional `aiRange` > `displacementShader` (scale 0.005, zero value 0.5) |
-| Transmission, Subsurface, Emission, Sheen, Coat | weight, color and roughness maps connected to the matching `aiStandardSurface` attributes |
-
-### V-Ray (`VRayMtl`)
-
-The material is set up with GGX reflections using roughness (`brdfType` 3, `useRoughness` on) and white reflection color, so the maps below control it.
-
-| Channel | Network |
-| --- | --- |
-| Base Color | file (sRGB) > optional `VRayColorCorrection` > `color` |
-| Ambient Occlusion | file > optional `remapValue` > multiplied into base color with `multiplyDivide` |
-| Roughness | file > optional `remapValue` > `reflectionGlossiness` |
-| Metalness | file > optional `remapValue` > `metalness` |
-| Specular Weight | file > optional `remapValue` > `reflectionColorAmount` |
-| Opacity | file > optional `remapValue` > `opacityMap` |
-| Normal | file > `VRayNormalMap` > `bumpMap` |
-| Displacement | file > optional `remapValue` > `displacementShader` (scale 0.005) |
-| Refraction, Translucency / SSS, Self-Illumination, Sheen, Coat | weight, color and glossiness maps connected to the matching `VRayMtl` attributes |
-
-Notes:
-
-- For Subsurface / Translucency, when a weight map is used and no separate color map is given, the base color network is also fed into the subsurface color.
-- With V-Ray, subsurface sets the translucency mode to SSS when the attribute is available.
-- Self-Illumination multiplies the color by the weight map when both are present.
+- **Arnold:** an `aiStandardSurface` material with the textures connected to the matching attributes. Normal maps go through an Arnold normal map node, and ambient occlusion is multiplied into the base color.
+- **V-Ray:** a `VRayMtl` material set up for roughness-based reflections, with the textures connected to the matching attributes. Normal maps go through a V-Ray normal map node, and ambient occlusion is multiplied into the base color.
+- **Both engines:** every texture gets its own file node, all sharing one UV placement, with the correct color space. Displacement is connected to the shading group with a default scale of 0.005.
+- **Subsurface / Translucency:** if you use a weight map without a separate color map, the base color is used as the subsurface color.
+- **Self-Illumination (V-Ray):** the color is multiplied by the weight map when both are provided.
 
 ## Replacing an Existing Material
 
 If your selection already has a material, it appears in **Target Material**.
 
 - The new material is assigned to **every object using the old material**, not only the objects you selected.
-- If **Delete old material and textures** is on, the old shading network is removed once nothing uses it.
+- If **Delete old material and textures** is on, the old material is removed once nothing uses it.
 - If the new name matches the old material's name, the old one is renamed or removed first so the new material can keep the name.
 - Maya's built-in shaders (`lambert1`, `standardSurface1`, `particleCloud1` and similar, plus OpenPBR materials) are never deleted.
 - With no existing material (or an unused one), the new material is assigned to your selected meshes.
-
-## Running Without the Shelf Button
-
-From the Maya Script Editor (Python tab), after installing:
-
-```python
-import ShaderCreator
-ShaderCreator.create_shader_creator_ui()        # opens on the engine matching your renderer
-ShaderCreator.create_ai_shader_ui()             # opens set to Arnold
-ShaderCreator.create_vray_shader_ui()           # opens set to V-Ray
-```
-
-While developing, reload after editing the file:
-
-```python
-import importlib, ShaderCreator
-importlib.reload(ShaderCreator)
-ShaderCreator.create_shader_creator_ui()
-```
 
 ## Troubleshooting
 
@@ -206,22 +166,12 @@ ShaderCreator.create_shader_creator_ui()
 | Dropdowns are empty after Detect Materials | No file in that folder starts with the detected prefix, or the extensions are not in the supported list. Use the browse button on each channel instead. |
 | Wrong prefix detected | The file name has no recognized channel keyword. Rename the files so a keyword follows `_` or `.`, or pick maps manually. |
 | UDIM not recognized | The tile number must be four digits starting at 1001. Check the naming pattern. |
-| New script version not showing | Restart Maya or reload the `ShaderCreator` module after re-running `install.mel`. |
+| New version not showing | Restart Maya after re-running `install.mel`. |
 | Shelf button missing | Run `install.mel` again. The button is added to the **Custom** shelf. |
 
 ## Uninstallation
 
 Drag and drop `uninstall.mel` into the Maya viewport, or run it from the Script Editor. It removes the installed script and icon, removes the shelf button, and closes the tool window if it is open.
-
-## Project Files
-
-| File | Purpose |
-| --- | --- |
-| `ShaderCreator.py` | The tool: interface and material-building logic. |
-| `install.mel` | Installer: copies files and adds the shelf button. |
-| `uninstall.mel` | Remover: deletes installed files and the shelf button. |
-| `icon.png` | Shelf button icon. |
-| `LICENSE` | MIT License text. |
 
 ## License
 
